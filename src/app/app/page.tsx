@@ -45,7 +45,11 @@ export default function ToolPage() {
   const [showPerf, setShowPerf] = useState<boolean>(false);
   // Reload attempts and ticking clock for blocked/slow detection
   const [reloadCounts, setReloadCounts] = useState<Record<string, number>>({});
-  const [clock, setClock] = useState<number>(Date.now());
+  const [clock, setClock] = useState<number>(performance.now());
+  // Thresholds (ms)
+  const SLOW_THRESHOLD = 2000; // previously 4000
+  const BLOCK_THRESHOLD = 3500; // previously 8000
+  const BLOCKED_DOMAIN_RE = useMemo(()=>/(^|\.)google\.[a-z]+$|(^|\.)facebook\.com$|(^|\.)instagram\.com$|(^|\.)twitter\.com$|(^|\.)x\.com$|(^|\.)linkedin\.com$/i,[]);
   // Removed sync scroll & proxy mode
   const { mode: themeMode, toggle: toggleTheme, resolved: resolvedTheme, setMode: setThemeMode } = useTheme();
   // Presets (name -> serialized breakpoints string)
@@ -243,7 +247,7 @@ export default function ToolPage() {
   useEffect(()=>{
     const hasPending = Object.values(perfData).some(v => v && v.start && !v.end);
     if(!hasPending) return; // no interval when all settled
-    const h = setInterval(()=> setClock(Date.now()), 1000);
+    const h = setInterval(()=> setClock(performance.now()), 500);
     return ()=> clearInterval(h);
   },[perfData]);
 
@@ -376,12 +380,16 @@ export default function ToolPage() {
                 const frameKey = bp.id;
                 const perf = perfData[frameKey];
                 const loadMs = perf?.end && perf.start ? (perf.end - perf.start).toFixed(0) : null;
-                // Determine status for pending loads
+                // Determine status for pending loads (helper logic)
                 let status: 'idle' | 'slow' | 'blocked' = 'idle';
-                if(perf && perf.start && !perf.end) {
+                const host = (()=>{ try { return loadedUrl ? new URL(loadedUrl).hostname : ''; } catch { return ''; } })();
+                const domainLooksBlocked = host && BLOCKED_DOMAIN_RE.test(host);
+                if(domainLooksBlocked) {
+                  status = 'blocked';
+                } else if(perf && perf.start && !perf.end) {
                   const elapsed = clock - perf.start;
-                  if(elapsed > 8000) status = 'blocked';
-                  else if(elapsed > 4000) status = 'slow';
+                  if(elapsed > BLOCK_THRESHOLD) status = 'blocked';
+                  else if(elapsed > SLOW_THRESHOLD) status = 'slow';
                 }
                 const reloadCount = reloadCounts[frameKey] || 0;
                 const iframeKey = frameKey + ':' + reloadCount; // force remount on reload
@@ -425,7 +433,7 @@ export default function ToolPage() {
                             {status === 'blocked' && (
                               <>
                                 <span className="text-[11px] font-semibold text-red-500">Likely blocked</span>
-                                <span className="text-[10px] text-base-muted leading-snug">Embedding refused by site (X-Frame-Options / CSP)</span>
+                                <span className="text-[10px] text-base-muted leading-snug">Embedding refused (X-Frame-Options / CSP)</span>
                               </>
                             )}
                             <div className="flex flex-wrap gap-2 justify-center">
