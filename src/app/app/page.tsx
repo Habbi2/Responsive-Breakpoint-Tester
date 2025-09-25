@@ -43,6 +43,9 @@ export default function ToolPage() {
   const [lazyLoad, setLazyLoad] = useState<boolean>(true);
   const [perfData, setPerfData] = useState<Record<string,{start:number; end?:number}>>({});
   const [showPerf, setShowPerf] = useState<boolean>(false);
+  // Reload attempts and ticking clock for blocked/slow detection
+  const [reloadCounts, setReloadCounts] = useState<Record<string, number>>({});
+  const [clock, setClock] = useState<number>(Date.now());
   // Removed sync scroll & proxy mode
   const { mode: themeMode, toggle: toggleTheme, resolved: resolvedTheme, setMode: setThemeMode } = useTheme();
   // Presets (name -> serialized breakpoints string)
@@ -236,6 +239,19 @@ export default function ToolPage() {
     setPerfData(prev => ({ ...prev, [id]: { ...prev[id], end: performance.now() } }));
   },[]);
 
+  // Clock interval runs only while there are pending frames (start set but no end)
+  useEffect(()=>{
+    const hasPending = Object.values(perfData).some(v => v && v.start && !v.end);
+    if(!hasPending) return; // no interval when all settled
+    const h = setInterval(()=> setClock(Date.now()), 1000);
+    return ()=> clearInterval(h);
+  },[perfData]);
+
+  const reloadFrame = useCallback((id: string)=>{
+    setReloadCounts(prev => ({ ...prev, [id]: (prev[id]||0)+1 }));
+    setPerfData(prev => ({ ...prev, [id]: { start: performance.now() } }));
+  },[]);
+
   const totalLoadTime = useMemo(()=>{
     let sum = 0; let count = 0;
     Object.values(perfData).forEach(v => { if(v.end) { sum += (v.end - v.start); count++; } });
@@ -360,6 +376,15 @@ export default function ToolPage() {
                 const frameKey = bp.id;
                 const perf = perfData[frameKey];
                 const loadMs = perf?.end && perf.start ? (perf.end - perf.start).toFixed(0) : null;
+                // Determine status for pending loads
+                let status: 'idle' | 'slow' | 'blocked' = 'idle';
+                if(perf && perf.start && !perf.end) {
+                  const elapsed = clock - perf.start;
+                  if(elapsed > 8000) status = 'blocked';
+                  else if(elapsed > 4000) status = 'slow';
+                }
+                const reloadCount = reloadCounts[frameKey] || 0;
+                const iframeKey = frameKey + ':' + reloadCount; // force remount on reload
                 return (
                   <div key={bp.id} data-bp-id={bp.id} className="shrink-0 border border-base-border rounded-md shadow-sm bg-white dark:bg-[#111] relative" style={{ width: bp.width + (bp.unit==='px'?'px':'em') }}>
                     <div className="px-2 py-1 text-xs font-mono flex items-center justify-between border-b border-base-border">
@@ -380,13 +405,56 @@ export default function ToolPage() {
                       </div>
                     )}
                     {shouldLoad && (
-                      <iframe
-                        title={bp.id}
-                        src={loadedUrl}
-                        style={{ width: bp.width + (bp.unit==='px' ? 'px' : 'em'), height: frameHeight+'px' }}
-                        className="bg-white dark:bg-black rounded-b-md"
-                        onLoad={()=> markFrameLoaded(frameKey)}
-                      />
+                      <>
+                        <iframe
+                          key={iframeKey}
+                          title={bp.id}
+                          src={loadedUrl}
+                          style={{ width: bp.width + (bp.unit==='px' ? 'px' : 'em'), height: frameHeight+'px' }}
+                          className="bg-white dark:bg-black rounded-b-md"
+                          onLoad={()=> markFrameLoaded(frameKey)}
+                        />
+                        {status !== 'idle' && (
+                          <div className={`absolute inset-0 rounded-b-md flex flex-col items-center justify-center gap-2 text-center px-3 ${status==='blocked' ? 'bg-red-500/15 border border-red-500/40' : 'bg-base-bg/70 border border-base-border/60'} backdrop-blur-sm`}> 
+                            {status === 'slow' && (
+                              <>
+                                <span className="text-[11px] font-medium">Still loading…</span>
+                                <span className="text-[10px] text-base-muted">Site taking longer than usual</span>
+                              </>
+                            )}
+                            {status === 'blocked' && (
+                              <>
+                                <span className="text-[11px] font-semibold text-red-500">Likely blocked</span>
+                                <span className="text-[10px] text-base-muted leading-snug">Embedding refused by site (X-Frame-Options / CSP)</span>
+                              </>
+                            )}
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {status !== 'blocked' && (
+                                <button
+                                  type="button"
+                                  onClick={()=> reloadFrame(frameKey)}
+                                  className="px-2 py-1 rounded bg-base-accent text-white text-[10px] hover:opacity-90"
+                                >Reload</button>
+                              )}
+                              {status === 'blocked' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={()=> reloadFrame(frameKey)}
+                                    className="px-2 py-1 rounded bg-base-accent text-white text-[10px] hover:opacity-90"
+                                  >Retry</button>
+                                  <a
+                                    href={loadedUrl || '#'}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="px-2 py-1 rounded border border-base-border text-[10px] hover:bg-base-hover"
+                                  >Open</a>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 );

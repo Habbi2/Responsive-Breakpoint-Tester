@@ -8,11 +8,11 @@ Preview a URL across multiple viewport widths simultaneously. Fast, no-auth, sha
 - Light / Dark / System theme (persisted locally)
 - Lazy iframe loading with manual force-load option
 - Performance timing (per frame + average) optional overlay
-- Presets saved locally (now store breakpoint list + optional URL)
+- Heuristic blocked-frame overlay (slow >4s, blocked >8s) with retry + open externally
+- Presets saved locally (store breakpoint list + optional URL)
 - Shareable state via query parameters: `?w=360px,480px,768px&u=https://example.com&h=600&t=dark`
 
 ## Not Implemented / Ideas
-- Blocked frame visual overlay (currently relies on browser default error)
 - Screenshot export batch
 - Extract breakpoints from target CSS
 - Contrast checking per frame
