@@ -1,0 +1,25 @@
+/* CSS Variables for light/dark */
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #0b0e13;
+  --color-muted: #5a6270;
+  --color-border: #d9dde3;
+  --color-accent: #2563eb;
+}
+.dark {
+  --color-bg: #0d1117;
+  --color-fg: #e6edf3;
+  --color-muted: #7d8590;
+  --color-border: #30363d;
+  --color-accent: #3b82f6;
+}
+html, body { padding: 0; margin: 0; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--color-bg); color: var(--color-fg); }
+* { box-sizing: border-box; }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Utility overrides */
+.text-balance { text-wrap: balance; }
