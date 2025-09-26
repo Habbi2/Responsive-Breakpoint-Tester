@@ -262,139 +262,6 @@ export default function ToolPage() {
     return count ? { avg: sum / count, count } : null;
   },[perfData]);
 
-  // --- Contrast Scan (same-origin only) ---
-  interface ContrastIssue {
-    text: string;
-    fg: string;
-    bg: string;
-    ratio: number;
-    level: 'AA-large' | 'AA' | 'AAA' | 'fail';
-    path: string;
-  }
-  interface ContrastResult { issues: ContrastIssue[]; scanned: number; failed: number; passed: number; elapsed: number; }
-  const [contrastResults, setContrastResults] = useState<Record<string, ContrastResult>>({});
-  const [scanningContrast, setScanningContrast] = useState(false);
-
-  // Helpers for contrast calculations
-  function parseColor(str: string): [number,number,number] | null {
-    const ctx = document.createElement('canvas').getContext('2d');
-    if(!ctx) return null;
-    ctx.fillStyle = '#000';
-    ctx.fillStyle = str;
-    const computed = ctx.fillStyle; // standardizes
-    if(/^#([0-9a-f]{3,8})$/i.test(computed)) {
-      let hex = computed.slice(1);
-      if(hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
-      if(hex.length >=6) {
-        const r = parseInt(hex.slice(0,2),16);
-        const g = parseInt(hex.slice(2,4),16);
-        const b = parseInt(hex.slice(4,6),16);
-        return [r,g,b];
-      }
-    }
-    return null;
-  }
-  function relLum([r,g,b]:[number,number,number]): number {
-    const f = (v:number)=>{
-      v/=255; return v<=0.03928? v/12.92 : Math.pow((v+0.055)/1.055,2.4);
-    };
-    return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);
-  }
-  function contrastRatio(fgRgb:[number,number,number], bgRgb:[number,number,number]): number {
-    const L1 = relLum(fgRgb); const L2 = relLum(bgRgb);
-    const lighter = Math.max(L1,L2); const darker = Math.min(L1,L2);
-    return (lighter + 0.05) / (darker + 0.05);
-  }
-  function classify(ratio:number, fontSizePx:number, fontWeight:number): ContrastIssue['level'] {
-    const isLarge = fontSizePx >= 24 || (fontSizePx >= 19 && fontWeight >= 700);
-    if(ratio >= 7) return 'AAA';
-    if(ratio >= 4.5) return 'AA';
-    if(isLarge && ratio >= 3) return 'AA-large';
-    return 'fail';
-  }
-  function cssPath(el:Element): string {
-    const parts:string[] = [];
-    let current: Element | null = el;
-    while(current && parts.length < 6) {
-      const name = current.tagName.toLowerCase();
-      const id = current.id ? '#'+current.id : '';
-      let selector = name+id;
-      if(!id) {
-        const parent = current.parentElement;
-        if(parent) {
-          const siblings = Array.from(parent.children).filter(c=>c.tagName===current!.tagName);
-          if(siblings.length > 1) {
-            const index = siblings.indexOf(current)+1;
-            selector += `:nth-of-type(${index})`;
-          }
-        }
-      }
-      parts.unshift(selector);
-      current = current.parentElement;
-    }
-    return parts.join(' > ');
-  }
-  function findEffectiveBg(el: HTMLElement, win: Window): string {
-    let current: HTMLElement | null = el;
-    while(current) {
-      const bg = win.getComputedStyle(current).backgroundColor;
-      if(bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
-      current = current.parentElement;
-    }
-    return win.getComputedStyle(win.document.body).backgroundColor || '#fff';
-  }
-
-  const scanContrast = useCallback(async ()=>{
-    if(!loadedUrl) return;
-    setScanningContrast(true);
-    const startAll = performance.now();
-    const next: Record<string, ContrastResult> = {};
-    const frames = Array.from(document.querySelectorAll('iframe')) as HTMLIFrameElement[];
-    for(const frame of frames) {
-      const bpId = frame.title; // using title as id
-      let issues: ContrastIssue[] = [];
-      let scanned = 0;
-      const frameStart = performance.now();
-      try {
-        const win = frame.contentWindow; if(!win || !win.document) throw new Error('no win');
-        // same-origin guard
-        try { void win.document.body?.innerHTML; } catch { continue; }
-        const walker = win.document.createTreeWalker(win.document.body, NodeFilter.SHOW_ELEMENT, null);
-        const LIMIT = 1500; // cap
-        while(walker.nextNode() && scanned < LIMIT) {
-          const el = walker.currentNode as HTMLElement;
-          scanned++;
-          // Only text-bearing elements
-          if(!el) continue;
-          const style = win.getComputedStyle(el);
-            if(style.visibility === 'hidden' || style.display === 'none') continue;
-          const text = el.textContent?.trim() || '';
-          if(!text || text.length > 200) continue;
-          const fg = style.color;
-          const bg = findEffectiveBg(el, win);
-          const fgRgb = parseColor(fg); const bgRgb = parseColor(bg);
-          if(!fgRgb || !bgRgb) continue;
-          const ratio = contrastRatio(fgRgb, bgRgb);
-          const fontSize = parseFloat(style.fontSize) || 16;
-          const weight = parseInt(style.fontWeight,10) || 400;
-          const level = classify(ratio, fontSize, weight);
-          if(level === 'fail') {
-            issues.push({ text: text.slice(0,80), fg, bg, ratio: Number(ratio.toFixed(2)), level, path: cssPath(el) });
-            // highlight
-            el.style.outline = '2px solid #f00';
-            el.style.outlineOffset = '1px';
-          }
-        }
-      } catch {/* ignore frame errors */}
-      const elapsed = performance.now() - frameStart;
-      next[bpId] = { issues, scanned, failed: issues.length, passed: scanned - issues.length, elapsed };
-    }
-    setContrastResults(next);
-    setScanningContrast(false);
-    const totalElapsed = performance.now() - startAll;
-    pushToast(`Contrast scan done in ${Math.round(totalElapsed)}ms`, 'info');
-  },[loadedUrl, pushToast]);
-
   return (
     <div className="flex flex-col h-dvh">
       <header className="p-3 border-b border-base-border flex flex-wrap gap-3 items-center bg-base-bg/80 backdrop-blur-sm">
@@ -454,14 +321,6 @@ export default function ToolPage() {
               avg load: {totalLoadTime.avg.toFixed(0)}ms ({totalLoadTime.count} frames)
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={()=> scanContrast()}
-              disabled={!loadedUrl || scanningContrast}
-              className="px-3 py-1 rounded border border-base-border hover:bg-base-hover disabled:opacity-40"
-            >{scanningContrast ? 'Scanning…' : 'Scan Contrast'}</button>
-          </div>
           {/* Sync scroll & Proxy mode controls removed */}
         </section>
         <section>
@@ -611,47 +470,6 @@ export default function ToolPage() {
             </div>
           )}
         </section>
-        {loadedUrl && Object.keys(contrastResults).length > 0 && (
-          <section className="mt-4 border border-base-border rounded-md p-3 bg-base-bg/40">
-            <h3 className="text-xs font-semibold tracking-wide uppercase text-base-muted mb-2">Contrast Results</h3>
-            <div className="flex flex-col gap-3 max-h-[320px] overflow-auto pr-2 text-xs">
-              {breakpoints.map(bp => {
-                const r = contrastResults[bp.id];
-                if(!r) return null;
-                return (
-                  <div key={bp.id} className="border border-base-border rounded p-2 bg-base-bg/60">
-                    <div className="flex flex-wrap items-center gap-3 mb-1">
-                      <span className="font-mono text-[11px]">{bp.width}{bp.unit}</span>
-                      <span className="text-[10px] text-base-muted">scanned {r.scanned}</span>
-                      <span className={"text-[10px] "+(r.failed?"text-red-500":"text-green-600 dark:text-green-400")}>{r.failed} fail</span>
-                      <span className="text-[10px] text-base-muted">{r.passed} pass</span>
-                      <span className="text-[10px] text-base-muted">{Math.round(r.elapsed)}ms</span>
-                    </div>
-                    {r.issues.length>0 && (
-                      <ul className="space-y-1 max-h-32 overflow-auto pr-1">
-                        {r.issues.slice(0,8).map((iss,i)=>(
-                          <li key={i} className="flex flex-col gap-0.5 bg-red-500/10 rounded px-1 py-1">
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <span className="font-mono text-[10px]">{iss.ratio}</span>
-                              <code className="text-[10px] truncate flex-1" title={iss.text}>{iss.text}</code>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-[9px] text-base-muted">
-                              <span>{iss.fg}</span>
-                              <span>{iss.bg}</span>
-                              <span className="truncate" title={iss.path}>{iss.path}</span>
-                            </div>
-                          </li>
-                        ))}
-                        {r.issues.length>8 && <li className="text-[10px] text-base-muted">…{r.issues.length-8} more</li>}
-                      </ul>
-                    )}
-                    {r.issues.length===0 && <div className="text-[10px] text-base-muted">No failing text elements.</div>}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
       </main>
     </div>
   );
