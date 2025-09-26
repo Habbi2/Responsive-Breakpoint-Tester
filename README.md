@@ -1,6 +1,12 @@
+<p align="center"><img width="90" src="src/app/icon.svg" alt="Breakpoint Tester" /></p>
+
 # Responsive Breakpoint Tester
 
-Instantly preview any public URL across multiple viewport widths in parallel. No login. Copy a single URL to reproduce layout & settings.
+> Instant multi‑viewport preview & sharing for any public URL. [Live Demo](https://responsive-breakpoint-tester.vercel.app)
+
+![Stars](https://img.shields.io/github/stars/Habbi2/Responsive-Breakpoint-Tester?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square) ![Status](https://img.shields.io/badge/status-stable-green?style=flat-square)
+
+Instantly preview any public URL across multiple viewport widths in parallel. No login. Copy a single URL to restore layout & settings.
 
 ## Table of Contents
 1. Overview
@@ -30,12 +36,12 @@ The tool renders the same page in multiple iframes sized to your chosen breakpoi
 
 ## 3. Quick Start
 ```bash
-git clone <repo-url>
-cd breakpoint-tester
+git clone https://github.com/Habbi2/Responsive-Breakpoint-Tester
+cd Responsive-Breakpoint-Tester
 npm install
 npm run dev
 ```
-Then open: http://localhost:3000 and click Open Tool.
+Open http://localhost:3000 and click Open Tool.
 
 ## 4. URL Parameters
 State is encoded to allow copy/paste reproducibility:
@@ -105,7 +111,10 @@ Guidelines:
 - Maintain readability in `page.tsx` (consider extracting logic if it grows further)
 
 ## 11. License
-MIT (add a LICENSE file if distributing publicly).
+MIT.
+
+## Social / Preview Assets
+Suggested OG image: 4 columns (mobile → desktop) showing the same site with widths captioned. Consider dynamic generation using a template (see upcoming portal OG service).
 
 ---
 Design & build by Habbi Web Design. Share improvements back! 🚀
