@@ -16,6 +16,7 @@
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@types/html2canvas": "1.0.0",
     "@types/node": "20.11.30",
     "@types/react": "18.2.21",
     "@types/react-dom": "18.2.7",
@@ -23,5 +24,10 @@
     "postcss": "8.4.41",
     "tailwindcss": "3.4.10",
     "typescript": "5.5.4"
+  },
+  "optionalDependencies": {
+    "html2canvas": "1.4.1",
+    "jszip": "3.10.1",
+    "file-saver": "2.0.5"
   }
 }
